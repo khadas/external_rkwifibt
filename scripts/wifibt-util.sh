@@ -34,14 +34,13 @@ wifibt_info()
 		/sys/bus/usb/devices/*/ \
 		/sys/bus/pci/devices/*/ \
 		/sys/bus/sdio/devices/*/ \
-		-type f -name vendor 2>/dev/null | \
+		-type f -name vendor -o -name idVendor 2>/dev/null | \
 		xargs grep -El "$VIDS" || true)"
 	for VENDOR in $VENDORS; do
 		UEVENT="$(echo $VENDOR | sed 's~\(/id\)\?/vendor~/uevent~')"
-		VID="$(cat "$VENDOR" | sed 's/^0x//')"
-
+		VID="$(sed 's/^0x//' "$VENDOR")"
 		IDS="$(grep -v "^#" "$CHIPS_FILE" | grep "\b$VID:" | \
-			cut -f3 | sort | uniq | tr ':' '.')"
+			cut -f3 | tr ':' '.')"
 		for ID in $IDS; do
 			grep -iqE "$ID" "$UEVENT" || continue
 

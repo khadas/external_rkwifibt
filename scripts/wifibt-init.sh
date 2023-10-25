@@ -89,34 +89,47 @@ start_bt()
 	esac
 }
 
-WIFIBT_CHIP=$(wifibt-util.sh chip)
-if [ -z "$WIFIBT_CHIP" ]; then
-	echo "Failed to detect Wi-Fi/BT chip!"
-	exit 0
-fi
+start_wifibt()
+{
+	WIFIBT_CHIP=$(wifibt-util.sh chip)
+	if [ -z "$WIFIBT_CHIP" ]; then
+		echo "Failed to detect Wi-Fi/BT chip!"
+		exit 0
+	fi
 
-WIFIBT_VENDOR="$(wifibt-util.sh vendor)"
-WIFIBT_BUS="$(wifibt-util.sh bus)"
-WIFIBT_MODULE="$(wifibt-util.sh module)"
-WIFIBT_TTY=$(wifibt-util.sh tty)
+	WIFIBT_VENDOR="$(wifibt-util.sh vendor)"
+	WIFIBT_BUS="$(wifibt-util.sh bus)"
+	WIFIBT_MODULE="$(wifibt-util.sh module)"
+	WIFIBT_TTY=$(wifibt-util.sh tty)
 
-echo "Handling ${1:-start} for Wi-Fi/BT chip: $(wifibt-util.sh info)"
+	echo "Handling $1 for Wi-Fi/BT chip: $(wifibt-util.sh info)"
 
-case "${1:-start}" in
-	start|restart)
-		echo "Starting Wifi/BT..."
-		start_wifi&
-		start_bt&
-		;;
-	start_wifi)
-		start_wifi&
-		;;
-	start_bt)
-		start_bt&
+	case "$1" in
+		start | restart)
+			echo "Starting Wifi/BT..."
+			start_wifi
+			start_bt
+			;;
+		start_wifi)
+			echo "Starting Wifi..."
+			start_wifi
+			;;
+		start_bt)
+			echo "Starting BT..."
+			start_bt
+			;;
+	esac
+}
+
+case "$1" in
+	start | restart | start_wifi | start_bt | "")
+		start_wifibt "${1:-start}"&
 		;;
 	stop)
 		echo "Stopping Wi-Fi/BT..."
 		killall -q -9 brcm_patchram_plus1 rtk_hciattach || true
+		ifdown wlan0 down 2>/dev/null || true
+		ifconfig wlan0 down 2>/dev/null || true
 		;;
 	*)
 		echo "Usage: [start|stop|start_wifi|start_bt|restart]" >&2

@@ -1,7 +1,7 @@
 /*
  * BCMSDH Function Driver for the native SDIO/MMC driver in the Linux Kernel
  *
- * Copyright (C) 2020, Broadcom.
+ * Copyright (C) 2022, Broadcom.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -202,6 +202,7 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM4362_CHIP_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43751_CHIP_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43752_CHIP_ID) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43756_CHIP_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43012_CHIP_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43014_CHIP_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43014_D11N_ID) },
@@ -211,6 +212,9 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43013_D11N_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43013_D11N2G_ID) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM43013_D11N5G_ID) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_ANY_ID) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM4381_CHIP_ID) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, BCM4382_CHIP_ID) },
 	{ SDIO_DEVICE_CLASS(SDIO_CLASS_NONE)		},
 	{ 0, 0, 0, 0 /* end: all zeroes */
 	},

@@ -5,6 +5,18 @@ wifi_ready()
 	grep -wqE "wlan0|p2p0" /proc/net/dev
 }
 
+bt_ready()
+{
+	for i in `seq 60`; do
+		if hciconfig | grep -wqE "hci0"; then
+			echo "Successfully init BT for $WIFIBT_CHIP!"
+			return
+		fi
+		sleep .1
+	done
+	echo "Failed to init BT for $WIFIBT_CHIP!"
+}
+
 start_bt_brcm()
 {
 	killall -q -9 brcm_patchram_plus1
@@ -16,7 +28,7 @@ start_bt_brcm()
 	echo 1 > /proc/bluetooth/sleep/btwrite
 	sleep .5
 
-	brcm_patchram_plus1 --bd_addr_rand --enable_hci --no2bytes \
+	brcm_patchram_plus1 --enable_hci --no2bytes \
 		--use_baudrate_for_download --tosleep 200000 \
 		--baudrate 1500000 \
 		--patchram ${WIFIBT_FIRMWARE_DIR:-/lib/firmware}/ $WIFIBT_TTY
@@ -60,6 +72,7 @@ start_wifi()
 	for i in `seq 100`; do
 		if wifi_ready; then
 			if grep -wqE "wlan0" /proc/net/dev; then
+				echo "Successfully init WiFi for $WIFIBT_CHIP!"
 				ifup wlan0&
 			fi
 			return
@@ -79,14 +92,15 @@ start_bt()
 		Realtek)
 			case "$WIFIBT_BUS" in
 				usb) start_bt_rtk_usb ;;
-				*) start_bt_rtk_uart ;;
+				*) start_bt_rtk_uart &;;
 			esac
 			;;
 		*)
 			echo "Unknow Wi-Fi/BT chip, fallback to Broadcom..."
-			start_bt_brcm
+			start_bt_brcm &
 			;;
 	esac
+	bt_ready &
 }
 
 start_wifibt()

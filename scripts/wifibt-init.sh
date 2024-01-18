@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 
 wifi_ready()
 {
@@ -7,19 +7,12 @@ wifi_ready()
 
 bt_ready()
 {
-	for i in `seq 60`; do
-		if hciconfig | grep -wqE "hci0"; then
-			echo "Successfully init BT for $WIFIBT_CHIP!"
-			return
-		fi
-		sleep .1
-	done
-	echo "Failed to init BT for $WIFIBT_CHIP!"
+	hciconfig | grep -wqE "hci0"
 }
 
 start_bt_brcm()
 {
-	killall -q -9 brcm_patchram_plus1
+	killall -q -9 brcm_patchram_plus1 || true
 
 	echo 0 > /sys/class/rfkill/rfkill0/state
 	echo 0 > /proc/bluetooth/sleep/btwrite
@@ -28,15 +21,16 @@ start_bt_brcm()
 	echo 1 > /proc/bluetooth/sleep/btwrite
 	sleep .5
 
+	which brcm_patchram_plus1 >/dev/null
 	brcm_patchram_plus1 --enable_hci --no2bytes \
 		--use_baudrate_for_download --tosleep 200000 \
 		--baudrate 1500000 \
-		--patchram ${WIFIBT_FIRMWARE_DIR:-/lib/firmware}/ $WIFIBT_TTY
+		--patchram ${WIFIBT_FIRMWARE_DIR:-/lib/firmware}/ $WIFIBT_TTY&
 }
 
 start_bt_rtk_uart()
 {
-	killall -q -9 rtk_hciattach
+	killall -q -9 rtk_hciattach || true
 
 	echo 0 > /sys/class/rfkill/rfkill0/state
 	echo 0 > /proc/bluetooth/sleep/btwrite
@@ -45,20 +39,23 @@ start_bt_rtk_uart()
 	echo 1 > /proc/bluetooth/sleep/btwrite
 	sleep .5
 
-	insmod hci_uart.ko
-	sleep .5
+	if ! lsmod | grep -q hci_uart; then
+		insmod hci_uart.ko
+		sleep .5
+	fi
 
-	rtk_hciattach -n -s 115200 $WIFIBT_TTY rtk_h5
+	which rtk_hciattach >/dev/null
+	rtk_hciattach -n -s 115200 $WIFIBT_TTY rtk_h5&
 }
 
 start_bt_rtk_usb()
 {
-	insmod rtk_btusb.ko
+	lsmod | grep -q rtk_btusb || insmod rtk_btusb.ko
 }
 
 start_wifi()
 {
-	! wifi_ready || return
+	! wifi_ready || return 0
 
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
@@ -69,46 +66,66 @@ start_wifi()
 	echo "Installing WiFi/BT module: $WIFIBT_MODULE"
 	insmod "$WIFIBT_MODULE"
 
-	for i in `seq 100`; do
+	for i in `seq 60`; do
 		if wifi_ready; then
 			if grep -wqE "wlan0" /proc/net/dev; then
 				echo "Successfully init WiFi for $WIFIBT_CHIP!"
-				ifup wlan0&
+				ifup wlan0 2>/dev/null || \
+					ifconfig wlan0 up || true &
 			fi
-			return
+			return 0
 		fi
-		sleep .2
+		sleep .1
 	done
+
 	echo "Failed to init Wi-Fi for $WIFIBT_CHIP!"
+	return 1
 }
 
-
-start_bt()
+do_start_bt()
 {
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
 	case "$WIFIBT_VENDOR" in
-		Broadcom) start_bt_brcm ;;
+		Broadcom) start_bt_brcm;;
 		Realtek)
 			case "$WIFIBT_BUS" in
-				usb) start_bt_rtk_usb ;;
-				*) start_bt_rtk_uart &;;
+				usb) start_bt_rtk_usb;;
+				*) start_bt_rtk_uart;;
 			esac
 			;;
 		*)
 			echo "Unknow Wi-Fi/BT chip, fallback to Broadcom..."
-			start_bt_brcm &
+			start_bt_brcm
 			;;
 	esac
-	bt_ready &
+}
+
+start_bt()
+{
+	wifi_ready || return 1
+	! bt_ready || return 0
+
+	if do_start_bt; then
+		for i in `seq 60`; do
+			if bt_ready; then
+				echo "Successfully init BT for $WIFIBT_CHIP!"
+				return 0
+			fi
+			sleep .1
+		done
+	fi
+
+	echo "Failed to init BT for $WIFIBT_CHIP!"
+	return 1
 }
 
 start_wifibt()
 {
-	WIFIBT_CHIP=$(wifibt-util.sh chip)
+	WIFIBT_CHIP=$(wifibt-util.sh chip || true)
 	if [ -z "$WIFIBT_CHIP" ]; then
 		echo "Failed to detect Wi-Fi/BT chip!"
-		exit 0
+		return 1
 	fi
 
 	WIFIBT_VENDOR="$(wifibt-util.sh vendor)"
@@ -123,21 +140,24 @@ start_wifibt()
 			echo "Starting Wifi/BT..."
 			start_wifi
 			start_bt
+			echo "Done"
 			;;
 		start_wifi)
 			echo "Starting Wifi..."
 			start_wifi
+			echo "Done"
 			;;
 		start_bt)
 			echo "Starting BT..."
 			start_bt
+			echo "Done"
 			;;
 	esac
 }
 
 case "$1" in
 	start | restart | start_wifi | start_bt | "")
-		start_wifibt "${1:-start}"&
+		start_wifibt "${1:-start}" &
 		;;
 	stop)
 		echo "Stopping Wi-Fi/BT..."

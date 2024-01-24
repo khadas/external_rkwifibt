@@ -95,7 +95,7 @@ do_start_bt()
 			esac
 			;;
 		*)
-			echo "Unknow Wi-Fi/BT chip, fallback to Broadcom..."
+			echo "Unknown Wi-Fi/BT chip, fallback to Broadcom..."
 			start_bt_brcm
 			;;
 	esac

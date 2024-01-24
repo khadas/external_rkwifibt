@@ -5,9 +5,10 @@ After=local-fs.target
 Before=network.target
 
 [Service]
-Type=forking
+Type=oneshot
 ExecStart=/usr/bin/wifibt-init.sh start
 ExecStop=/usr/bin/wifibt-init.sh stop
+RemainAfterExit=yes
 
 [Install]
 WantedBy=sysinit.target

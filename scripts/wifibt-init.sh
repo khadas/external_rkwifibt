@@ -10,18 +10,32 @@ bt_ready()
 	hciconfig | grep -wqE "hci0"
 }
 
+rfkill_for_type()
+{
+	grep -rl "^${1:-bluetooth}$" /sys/class/rfkill/*/type | \
+		sed 's/type$/state/' 2>/dev/null || true
+}
+
+bt_reset()
+{
+	RFKILL=$(rfkill_for_type bluetooth)
+	[ "$RFKILL" ] || return 0
+
+	echo 0 | tee $RFKILL >/dev/null
+	echo 0 > /proc/bluetooth/sleep/btwrite
+	sleep .5
+	echo 1 | tee $RFKILL >/dev/null
+	echo 1 > /proc/bluetooth/sleep/btwrite
+	sleep .5
+}
+
 start_bt_brcm()
 {
 	killall -q -9 brcm_patchram_plus1 || true
-
-	echo 0 > /sys/class/rfkill/rfkill0/state
-	echo 0 > /proc/bluetooth/sleep/btwrite
-	sleep .5
-	echo 1 > /sys/class/rfkill/rfkill0/state
-	echo 1 > /proc/bluetooth/sleep/btwrite
-	sleep .5
-
 	which brcm_patchram_plus1 >/dev/null
+
+	bt_reset
+
 	brcm_patchram_plus1 --enable_hci --no2bytes \
 		--use_baudrate_for_download --tosleep 200000 \
 		--baudrate 1500000 \
@@ -31,31 +45,43 @@ start_bt_brcm()
 start_bt_rtk_uart()
 {
 	killall -q -9 rtk_hciattach || true
+	which rtk_hciattach >/dev/null
 
-	echo 0 > /sys/class/rfkill/rfkill0/state
-	echo 0 > /proc/bluetooth/sleep/btwrite
-	sleep .5
-	echo 1 > /sys/class/rfkill/rfkill0/state
-	echo 1 > /proc/bluetooth/sleep/btwrite
-	sleep .5
+	bt_reset
 
-	if ! lsmod | grep -q hci_uart; then
+	if ! lsmod | grep -wq hci_uart; then
+		if [ -d /sys/module/hci_uart ]; then
+			echo "Please disable CONFIG_BT_HCIUART in kernel!"
+			return -1
+		fi
+
 		insmod hci_uart.ko
 		sleep .5
 	fi
 
-	which rtk_hciattach >/dev/null
 	rtk_hciattach -n -s 115200 $WIFIBT_TTY rtk_h5&
 }
 
 start_bt_rtk_usb()
 {
-	lsmod | grep -q rtk_btusb || insmod rtk_btusb.ko
+	bt_reset
+
+	if ! lsmod | grep -q rtk_btusb; then
+		if [ -d /sys/module/btusb ]; then
+			echo "Please disable CONFIG_BT_HCIBTUSB in kernel!"
+			return -1
+		fi
+
+		insmod rtk_btusb.ko
+	fi
 }
 
 start_wifi()
 {
-	! wifi_ready || return 0
+	if wifi_ready; then
+		echo "Wi-Fi is already inited..."
+		return 0
+	fi
 
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
@@ -63,13 +89,13 @@ start_wifi()
 		insmod dhd_static_buf.ko
 	fi
 
-	echo "Installing WiFi/BT module: $WIFIBT_MODULE"
+	echo "Installing Wi-Fi/BT module: $WIFIBT_MODULE"
 	insmod "$WIFIBT_MODULE"
 
 	for i in `seq 60`; do
 		if wifi_ready; then
 			if grep -wqE "wlan0" /proc/net/dev; then
-				echo "Successfully init WiFi for $WIFIBT_CHIP!"
+				echo "Successfully init Wi-Fi for $WIFIBT_CHIP!"
 				ifup wlan0 2>/dev/null || \
 					ifconfig wlan0 up || true &
 			fi
@@ -103,8 +129,15 @@ do_start_bt()
 
 start_bt()
 {
-	wifi_ready || return 1
-	! bt_ready || return 0
+	if ! wifi_ready; then
+		echo "Wi-Fi is not ready..."
+		return 1
+	fi
+
+	if bt_ready; then
+		echo "BT is already inited..."
+		return 0
+	fi
 
 	if do_start_bt; then
 		for i in `seq 60`; do
@@ -133,17 +166,17 @@ start_wifibt()
 	WIFIBT_MODULE="$(wifibt-util.sh module)"
 	WIFIBT_TTY=$(wifibt-util.sh tty)
 
-	echo "Handling $1 for Wi-Fi/BT chip: $(wifibt-util.sh info)"
+	echo -e "\nHandling $1 for Wi-Fi/BT chip:\n$(wifibt-util.sh info)"
 
 	case "$1" in
 		start | restart)
-			echo "Starting Wifi/BT..."
+			echo "Starting Wi-Fi/BT..."
 			start_wifi
 			start_bt
 			echo "Done"
 			;;
 		start_wifi)
-			echo "Starting Wifi..."
+			echo "Starting Wi-Fi..."
 			start_wifi
 			echo "Done"
 			;;
@@ -160,10 +193,11 @@ case "$1" in
 		start_wifibt "${1:-start}" &
 		;;
 	stop)
-		echo "Stopping Wi-Fi/BT..."
+		echo -n "Stopping Wi-Fi/BT..."
 		killall -q -9 brcm_patchram_plus1 rtk_hciattach || true
 		ifdown wlan0 down 2>/dev/null || true
 		ifconfig wlan0 down 2>/dev/null || true
+		echo "Done"
 		;;
 	*)
 		echo "Usage: [start|stop|start_wifi|start_bt|restart]" >&2

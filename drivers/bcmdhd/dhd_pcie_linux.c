@@ -47,9 +47,9 @@
 #include <pcicfg.h>
 #include <dhd_pcie.h>
 #include <dhd_linux.h>
-#if defined(CUSTOMER_HW_ROCKCHIP) && defined(CUSTOMER_HW_ROCKCHIP_RK3588)
+#if IS_ENABLED(CONFIG_PCIEASPM_ROCKCHIP_WIFI_EXTENSION)
 #include <rk_dhd_pcie_linux.h>
-#endif /* CUSTOMER_HW_ROCKCHIP && CUSTOMER_HW_ROCKCHIP_RK3588 */
+#endif /* CONFIG_PCIEASPM_ROCKCHIP_WIFI_EXTENSION */
 #ifdef OEM_ANDROID
 #ifdef CONFIG_ARCH_MSM
 #if IS_ENABLED(CONFIG_PCI_MSM) || defined(CONFIG_ARCH_MSM8996)
@@ -105,6 +105,10 @@ unsigned char gpio_direction = 0;
 
 #ifndef BCMPCI_DEV_ID
 #define BCMPCI_DEV_ID PCI_ANY_ID
+#endif
+
+#ifndef SYNAPCI_DEV_ID
+#define SYNAPCI_DEV_ID PCI_ANY_ID
 #endif
 
 #ifdef FORCE_TPOWERON
@@ -227,6 +231,17 @@ static struct pci_device_id dhdpcie_pci_devid[] __devinitdata = {
 	override_only: 0,
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)) */
 	},
+	{ vendor: VENDOR_SYNAPTICS,
+	device: BCMPCI_DEV_ID,
+	subvendor: PCI_ANY_ID,
+	subdevice: PCI_ANY_ID,
+	class: PCI_CLASS_NETWORK_OTHER << 8,
+	class_mask: 0xffff00,
+	driver_data: 0,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
+	override_only: 0,
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)) */
+	},
 #if (BCMPCI_DEV_ID != PCI_ANY_ID) && defined(BCMPCI_NOOTP_DEV_ID)
 	{ vendor: VENDOR_BROADCOM,
 	device: BCMPCI_NOOTP_DEV_ID,
@@ -265,7 +280,9 @@ static const struct dev_pm_ops dhd_pcie_pm_ops = {
 #endif
 
 static struct pci_driver dhdpcie_driver = {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0))
 	node:		{&dhdpcie_driver.node, &dhdpcie_driver.node},
+#endif /* LINUX_VERSION_CODE < 6.8.0 */
 	name:		"pcieh"BUS_TYPE,
 	id_table:	dhdpcie_pci_devid,
 	probe:		dhdpcie_pci_probe,
@@ -626,17 +643,15 @@ dhd_bus_is_rc_ep_l1ss_capable(dhd_bus_t *bus)
 	uint32 rc_l1ss_cap;
 	uint32 ep_l1ss_cap;
 
-#if defined(CUSTOMER_HW_ROCKCHIP) && defined(CUSTOMER_HW_ROCKCHIP_RK3588)
-	if (IS_ENABLED(CONFIG_PCIEASPM_ROCKCHIP_WIFI_EXTENSION)) {
-		if (rk_dhd_bus_is_rc_ep_l1ss_capable(bus)) {
-			DHD_ERROR(("%s L1ss is capable\n", __FUNCTION__));
-			return TRUE;
-		} else {
-			DHD_ERROR(("%s L1ss is not capable\n", __FUNCTION__));
-			return FALSE;
-		}
+#if IS_ENABLED(CONFIG_PCIEASPM_ROCKCHIP_WIFI_EXTENSION)
+	if (rk_dhd_bus_is_rc_ep_l1ss_capable(bus)) {
+		DHD_ERROR(("%s L1ss is capable\n", __FUNCTION__));
+		return TRUE;
+	} else {
+		DHD_ERROR(("%s L1ss is not capable\n", __FUNCTION__));
+		return FALSE;
 	}
-#endif /* CUSTOMER_HW_ROCKCHIP && CUSTOMER_HW_ROCKCHIP_RK3588 */
+#endif
 
 	/* RC Extendend Capacility */
 	rc_l1ss_cap = dhdpcie_access_cap(bus->rc_dev, PCIE_EXTCAP_ID_L1SS,
@@ -750,7 +765,8 @@ static int dhdpcie_pci_suspend(struct device *dev)
 		if ((timeleft == 0) || (timeleft == 1)) {
 			DHD_ERROR(("%s: Timed out dhd_bus_busy_state=0x%x\n",
 				__FUNCTION__, bus->dhd->dhd_bus_busy_state));
-			return -EBUSY;
+			ret = -EBUSY;
+			goto exit;
 		}
 	} else {
 		DHD_BUS_BUSY_SET_SUSPEND_IN_PROGRESS(bus->dhd);
@@ -764,6 +780,7 @@ static int dhdpcie_pci_suspend(struct device *dev)
 	if (!bus->dhd->dongle_reset)
 		ret = dhdpcie_set_suspend_resume(bus, TRUE);
 
+exit:
 	DHD_GENERAL_LOCK(bus->dhd, flags);
 	DHD_BUS_BUSY_CLEAR_SUSPEND_IN_PROGRESS(bus->dhd);
 	dhd_os_busbusy_wake(bus->dhd);
@@ -1427,13 +1444,13 @@ static int dhdpcie_device_scan(struct device *dev, void *data)
 	pcidev = container_of(dev, struct pci_dev, dev);
 	GCC_DIAGNOSTIC_POP();
 
-	if (pcidev->vendor != 0x14e4)
+	if ((pcidev->vendor != VENDOR_BROADCOM) && (pcidev->vendor != VENDOR_SYNAPTICS))
 		return 0;
 
-	DHD_INFO(("Found Broadcom PCI device 0x%04x\n", pcidev->device));
+	DHD_INFO(("Found Broadcom or Synaptics PCI device 0x%04x\n", pcidev->device));
 	*cnt += 1;
 	if (pcidev->driver && strcmp(pcidev->driver->name, dhdpcie_driver.name))
-		DHD_ERROR(("Broadcom PCI Device 0x%04x has allocated with driver %s\n",
+		DHD_ERROR(("Broadcom or Synaptics PCI Device 0x%04x has allocated with driver %s\n",
 			pcidev->device, pcidev->driver->name));
 
 	return 0;
@@ -1447,7 +1464,7 @@ dhdpcie_bus_register(void)
 	if (!(error = pci_register_driver(&dhdpcie_driver))) {
 		bus_for_each_dev(dhdpcie_driver.driver.bus, NULL, &error, dhdpcie_device_scan);
 		if (!error) {
-			DHD_ERROR(("No Broadcom PCI device enumerated!\n"));
+			DHD_ERROR(("No Broadcom or Synaptics PCI device enumerated!\n"));
 #ifdef DHD_PRELOAD
 			return 0;
 #endif

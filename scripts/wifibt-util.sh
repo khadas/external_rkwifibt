@@ -111,9 +111,10 @@ Broadcom	AP6354	02d0:4354	bcmdhd.ko
 Broadcom	AP6356S	02d0:4356	bcmdhd.ko
 Broadcom	AP6398S	02d0:4359	bcmdhd.ko
 Broadcom	AP6212A	02d0:a9a6	bcmdhd.ko
-Broadcom	AP625X	02d0:a9bf	bcmdhd.ko	# AP6255/AP6256
+Broadcom	AP625X	02d0:a9bf	bcmdhd.ko	# AP6255/AP6256/AP6745
 Broadcom	AP6275S	02d0:aae8	bcmdhd.ko
 Broadcom	AP6275P	14e4:449d	bcmdhd_pcie.ko
+Broadcom	AP6276P	14e4:44a0	bcmdhd_pcie.ko
 EOF
 fi
 

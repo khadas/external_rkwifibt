@@ -307,6 +307,7 @@ dhd_wlan_init_gpio(wifi_adapter_info_t *adapter)
 	adapter->gpio_wl_reg_on = gpio_wl_reg_on;
 
 #ifdef CUSTOMER_OOB
+	adapter->gpio_wl_host_wake = -1;
 	if (gpio_wl_host_wake >= 0) {
 		err = gpio_request(gpio_wl_host_wake, "bcmdhd");
 		if (err < 0) {
@@ -329,8 +330,6 @@ dhd_wlan_init_gpio(wifi_adapter_info_t *adapter)
 			gpio_free(gpio_wl_host_wake);
 			return -1;
 		}
-	} else {
-		adapter->gpio_wl_host_wake = gpio_wl_host_wake;
 	}
 #ifdef CUSTOMER_HW_ROCKCHIP
 	host_oob_irq = rockchip_wifi_get_oob_irq();

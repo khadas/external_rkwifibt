@@ -95,6 +95,9 @@
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/netdevice.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+#include <net/netdev_rx_queue.h>
+#endif
 #include <linux/time.h>
 #include <linux/rtc.h>
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
@@ -1064,5 +1067,13 @@ static inline void do_gettimeofday(struct timeval *tv)
 #define	PCI_DMA_FROMDEVICE	2
 #endif
 #endif
+
+#if !defined(FREEBSD) && !defined(MACOSX) && !defined(BCM_USE_PLATFORM_STRLCPY)
+#include <bcmstdlib_s.h>
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+#define strlcpy(a, b, c)	strscpy(a, b, c)
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0) */
+#endif /* !defined(FREEBSD) && !defined(MACOSX) && !defined(BCM_USE_PLATFORM_STRLCPY) */
 
 #endif /* _linuxver_h_ */

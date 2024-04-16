@@ -1,8 +1,18 @@
 #!/bin/sh -e
 
+IF_FILE="/var/run/.wifibt-interfaces"
+
+do_insmod()
+{
+	if ! lsmod | grep -wq $1; then
+		insmod $1.ko
+		sleep ${2:-0}
+	fi
+}
+
 wifi_ready()
 {
-	grep -wqE "wlan0|p2p0" /proc/net/dev
+	grep -wqE "(wlan|p2p)[0-9]" /proc/net/dev
 }
 
 bt_ready()
@@ -49,15 +59,12 @@ start_bt_rtk_uart()
 
 	bt_reset
 
-	if ! lsmod | grep -wq hci_uart; then
-		if [ -d /sys/module/hci_uart ]; then
-			echo "Please disable CONFIG_BT_HCIUART in kernel!"
-			return -1
-		fi
-
-		insmod hci_uart.ko
-		sleep .5
+	if [ -d /sys/module/hci_uart ]; then
+		echo "Please disable CONFIG_BT_HCIUART in kernel!"
+		return -1
 	fi
+
+	do_insmod hci_uart 0.5
 
 	rtk_hciattach -n -s 115200 $WIFIBT_TTY rtk_h5&
 }
@@ -66,38 +73,38 @@ start_bt_rtk_usb()
 {
 	bt_reset
 
-	if ! lsmod | grep -q rtk_btusb; then
-		if [ -d /sys/module/btusb ]; then
-			echo "Please disable CONFIG_BT_HCIBTUSB in kernel!"
-			return -1
-		fi
-
-		insmod rtk_btusb.ko
+	if [ -d /sys/module/btusb ]; then
+		echo "Please disable CONFIG_BT_HCIBTUSB in kernel!"
+		return -1
 	fi
+
+	do_insmod rtk_btusb
 }
 
 start_wifi()
 {
 	if wifi_ready; then
 		echo "Wi-Fi is already inited..."
+		ifup wlan0 2>/dev/null || true &
+		ifconfig wlan0 up || true
 		return 0
 	fi
 
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
 	if [ "$WIFIBT_VENDOR" = Broadcom -a -f dhd_static_buf.ko ]; then
-		insmod dhd_static_buf.ko
+		do_insmod dhd_static_buf
 	fi
 
-	echo "Installing Wi-Fi/BT module: $WIFIBT_MODULE"
-	insmod "$WIFIBT_MODULE"
+	echo "Installing Wi-Fi/BT module: $WIFIBT_MODULE.ko"
+	do_insmod "$WIFIBT_MODULE"
 
 	for i in `seq 60`; do
 		if wifi_ready; then
 			if grep -wqE "wlan0" /proc/net/dev; then
 				echo "Successfully init Wi-Fi for $WIFIBT_CHIP!"
-				ifup wlan0 2>/dev/null || \
-					ifconfig wlan0 up || true &
+				ifup wlan0 2>/dev/null || true &
+				ifconfig wlan0 up || true
 			fi
 			return 0
 		fi
@@ -136,6 +143,7 @@ start_bt()
 
 	if bt_ready; then
 		echo "BT is already inited..."
+		hciconfig hci0 up 2>/dev/null || true
 		return 0
 	fi
 
@@ -143,6 +151,7 @@ start_bt()
 		for i in `seq 60`; do
 			if bt_ready; then
 				echo "Successfully init BT for $WIFIBT_CHIP!"
+				hciconfig hci0 up 2>/dev/null || true
 				return 0
 			fi
 			sleep .1
@@ -163,7 +172,7 @@ start_wifibt()
 
 	WIFIBT_VENDOR="$(wifibt-util.sh vendor)"
 	WIFIBT_BUS="$(wifibt-util.sh bus)"
-	WIFIBT_MODULE="$(wifibt-util.sh module)"
+	WIFIBT_MODULE="$(wifibt-util.sh module | cut -d'.' -f1)"
 	WIFIBT_TTY=$(wifibt-util.sh tty)
 
 	echo -e "\nHandling $1 for Wi-Fi/BT chip:\n$(wifibt-util.sh info)"
@@ -188,19 +197,72 @@ start_wifibt()
 	esac
 }
 
+stop_wifi()
+{
+	for iface in $(ifconfig | grep -oE "^(wlan|p2p)[0-9]"); do
+		ifdown $iface 2>/dev/null || true
+		ifconfig $iface down 2>/dev/null || true
+	done
+}
+
+stop_bt()
+{
+	hciconfig hci0 down 2>/dev/null || true
+	killall -q -9 brcm_patchram_plus1 rtk_hciattach || true
+}
+
+stop_wifibt()
+{
+	echo -n "Stopping Wi-Fi/BT..."
+	stop_wifi
+	stop_bt
+	echo "Done"
+}
+
+suspend_wifibt()
+{
+	# Store enabled Wi-Fi interfaces
+	ifconfig | grep -oE "^(wlan|p2p)[0-9]" > "$IF_FILE" || true
+
+	# Disable enabled Wi-Fi interfaces
+	for iface in $(cat "$IF_FILE"); do
+		echo "Disabling $iface..."
+		ifconfig $iface down || true
+	done
+
+	# Restart BT later in resume, since it might lose power during S2R
+	if bt_ready; then
+		echo "Disabling BT..."
+		echo "BT" >> "$IF_FILE"
+		stop_bt
+	fi
+}
+
+resume_wifibt()
+{
+	[ -r "$IF_FILE" ] || return 0
+
+	# Retore enabled interfaces
+	for iface in $(cat "$IF_FILE"); do
+		echo "Enabling $iface..."
+		case $iface in
+			BT) start_wifibt start_bt || true ;;
+			*) ifconfig $iface up || true ;;
+		esac
+	done
+
+	rm -f "$IF_FILE"
+}
+
 case "$1" in
 	start | restart | start_wifi | start_bt | "")
 		start_wifibt "${1:-start}" &
 		;;
-	stop)
-		echo -n "Stopping Wi-Fi/BT..."
-		killall -q -9 brcm_patchram_plus1 rtk_hciattach || true
-		ifdown wlan0 down 2>/dev/null || true
-		ifconfig wlan0 down 2>/dev/null || true
-		echo "Done"
-		;;
+	stop) stop_wifibt ;;
+	suspend) suspend_wifibt ;;
+	resume) resume_wifibt & ;;
 	*)
-		echo "Usage: [start|stop|start_wifi|start_bt|restart]" >&2
+		echo "Usage: [start|stop|start_wifi|start_bt|restart|suspend|resume]" >&2
 		exit 3
 		;;
 esac

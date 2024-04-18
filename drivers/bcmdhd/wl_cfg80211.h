@@ -688,8 +688,8 @@ do {	\
 		if (__err_ts == 0 || (__cur_ts > __err_ts && \
 		(__cur_ts - __err_ts > WL_PRINT_RATE_LIMIT_PERIOD))) { \
 			__err_ts = __cur_ts; \
-			WL_ERR(args);	\
-			WL_ERR(("[Repeats %u times]\n", __err_cnt)); \
+			WL_DBG(args);	\
+			WL_DBG(("[Repeats %u times]\n", __err_cnt)); \
 			__err_cnt = 0; \
 		} else { \
 			++__err_cnt; \

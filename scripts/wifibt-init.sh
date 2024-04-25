@@ -4,9 +4,17 @@ IF_FILE="/var/run/.wifibt-interfaces"
 
 do_insmod()
 {
-	if ! lsmod | grep -wq $1; then
-		insmod $1.ko
-		sleep ${2:-0}
+	if ! lsmod | grep -wq "$1"; then
+		echo "Installing $1.ko ..."
+		insmod "$1.ko"
+		sleep "${2:-0}"
+	fi
+}
+
+try_insmod()
+{
+	if [ -f "$1.ko" ]; then
+		do_insmod "$1" $2
 	fi
 }
 
@@ -92,11 +100,12 @@ start_wifi()
 
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
-	if [ "$WIFIBT_VENDOR" = Broadcom -a -f dhd_static_buf.ko ]; then
-		do_insmod dhd_static_buf
-	fi
+	case "$WIFIBT_VENDOR" in
+		Broadcom) try_insmod dhd_static_buf ;;
+		Realtek) try_insmod rtkm ;;
+	esac
 
-	echo "Installing Wi-Fi/BT module: $WIFIBT_MODULE.ko"
+	echo "Wi-Fi/BT module: $WIFIBT_MODULE.ko"
 	do_insmod "$WIFIBT_MODULE"
 
 	for i in `seq 60`; do

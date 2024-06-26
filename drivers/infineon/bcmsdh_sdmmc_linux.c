@@ -142,6 +142,20 @@ static void sdioh_remove(struct sdio_func *func)
 	osl_detach(osh);
 }
 
+#ifdef DHD_AUTO_BUS_RECOVERY
+int bcmsdh_sdio_probe(struct sdio_func *func)
+{
+    sd_info(("%s, enter\n", __FUNCTION__));
+    return sdioh_probe(func);
+}
+
+void bcmsdh_sdio_remove(struct sdio_func *func)
+{
+    sd_info(("%s, enter\n", __FUNCTION__));
+    sdioh_remove(func);
+}
+#endif /* DHD_AUTO_BUS_RECOVERY */
+
 static int bcmsdh_sdmmc_probe(struct sdio_func *func,
                               const struct sdio_device_id *id)
 {

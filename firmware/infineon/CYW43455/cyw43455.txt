@@ -19,7 +19,7 @@ btc_mode=1
 #boardflags: 5GHz eTR switch by default
 #            2.4GHz eTR switch by default
 #            bit1 for btcoex
-boardflags=0x00480201
+boardflags=0x00000000
 boardflags2=0x40800000
 boardflags3=0x48200100
 phycal_tempdelta=15
@@ -50,10 +50,10 @@ tworangetssi2g=1
 tworangetssi5g=1
 # LTECX flags
 # WCI2
-ltecxmux=0
-ltecxpadnum=0x0504
-ltecxfnsel=0x22
-ltecxgcigpio=0x32
+#ltecxmux=0
+#ltecxpadnum=0x0504
+#ltecxfnsel=0x22
+#ltecxgcigpio=0x32
 
 maxp2ga0=78
 ofdmlrbw202gpo=0x0044

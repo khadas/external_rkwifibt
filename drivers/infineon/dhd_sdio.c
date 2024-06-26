@@ -58,11 +58,11 @@
 #include <trxhdr.h>
 
 #ifdef DHD_KSO_MMC_RETUNE
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) || defined(CONFIG_DHD_PLAT_ROCKCHIP))
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)) || defined(CONFIG_DHD_PLAT_ROCKCHIP))
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/host.h>
 #include "bcmsdh_sdmmc.h"
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
+#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)) || defined(CONFIG_DHD_PLAT_ROCKCHIP)) */
 #endif /* DHD_KSO_MMC_RETURN */
 
 #include <ethernet.h>
@@ -76,6 +76,9 @@
 #include <dhd_dbg.h>
 #include <dhdioctl.h>
 #include <sdiovar.h>
+#ifdef DHD_AUTO_BUS_RECOVERY
+#include <dhd_linux.h>
+#endif /* DHD_AUTO_BUS_RECOVERY */
 
 #ifdef PROP_TXSTATUS
 #include <dhd_wlfc.h>
@@ -1144,28 +1147,26 @@ dhdsdio_clk_kso_enab(dhd_bus_t *bus, bool on)
 	int try_cnt = 0;
     
 #ifdef DHD_KSO_MMC_RETUNE
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) || defined(CONFIG_DHD_PLAT_ROCKCHIP))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
 	struct sdioh_info *sd = (struct sdioh_info *)(bus->sdh->sdioh);
 	struct sdio_func *func = sd->func[1];
-	struct mmc_host *host = func->card->host;
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
+#elif (defined(CONFIG_DHD_PLAT_ROCKCHIP))
+	struct sdioh_info *sd = (struct sdioh_info *)(bus->sdh->sdioh);
+	struct mmc_host *host = sd->func[1]->card->host;
+#endif /* CONFIG_DHD_PLAT_ROCKCHIP */
 #endif /* DHD_KSO_MMC_RETUNE */
 
 	KSO_DBG(("%s> op:%s\n", __FUNCTION__, (on ? "KSO_SET" : "KSO_CLR")));
 
 #ifdef DHD_KSO_MMC_RETUNE
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
     sdio_retune_crc_disable(func);
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) */
     if (on) {
-        mmc_retune_hold_now(host);
+        sdio_retune_hold_now(func);
     }
-#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
-#ifdef CONFIG_DHD_PLAT_ROCKCHIP
+#elif (defined(CONFIG_DHD_PLAT_ROCKCHIP))
     mmc_retune_disable(host);
 #endif /* CONFIG_DHD_PLAT_ROCKCHIP */
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
 #endif /* DHD_KSO_MMC_RETUNE */
 
 	wr_val |= (on << SBSDIO_FUNC1_SLEEPCSR_KSO_SHIFT);
@@ -1220,18 +1221,14 @@ dhdsdio_clk_kso_enab(dhd_bus_t *bus, bool on)
 
 exit:
 #ifdef DHD_KSO_MMC_RETUNE
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
     if (on) {
-        mmc_retune_release(host);
+        sdio_retune_release(func);
     }
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0))
     sdio_retune_crc_enable(func);
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) */
-#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
-#ifdef CONFIG_DHD_PLAT_ROCKCHIP
+#elif (defined(CONFIG_DHD_PLAT_ROCKCHIP))
     mmc_retune_enable(host);
 #endif /* CONFIG_DHD_PLAT_ROCKCHIP */
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) */
 #endif /* DHD_KSO_MMC_RETUNE */
 
 	return err;
@@ -3709,8 +3706,12 @@ dhdsdio_readconsole(dhd_bus_t *bus)
 		return 0;
 
 	/* Don't do anything until FWREADY updates console address */
-	if (bus->console_addr == 0)
-		return 0;
+	if (bus->console_addr == 0) {
+        dhdsdio_readshared_console(bus);
+        if (bus->console_addr == 0) {
+    		return 0;
+        }
+    }
 
 	if (!KSO_ENAB(bus))
 		return 0;
@@ -7361,6 +7362,9 @@ dhdsdio_hostmail(dhd_bus_t *bus, uint32 *hmbd)
 		DHD_ERROR(("INTERNAL ERROR: FIRMWARE HALTED : set BUS DOWN\n"));
 		dhdsdio_checkdied(bus, NULL, 0);
 		DHD_ERROR(("Not doing bus down untill memdump done \n"));
+#ifdef DHD_AUTO_BUS_RECOVERY
+        dhd_schedule_recovery();
+#endif /* DHD_AUTO_BUS_RECOVERY */
 	}
 
 	/* Shouldn't be any others */
@@ -10159,6 +10163,41 @@ dhdsdio_advertise_bus_cleanup(dhd_pub_t	 *dhdp)
 
 	return;
 }
+
+#ifdef DHD_AUTO_BUS_RECOVERY
+int dhd_bus_recovery(dhd_pub_t *dhdp)
+{
+	int ret;
+    dhd_bus_t *bus = dhdp->bus;    
+	struct sdioh_info *sd = (struct sdioh_info *)(bus->sdh->sdioh);
+	struct sdio_func *func = sd->func[2];
+	wifi_adapter_info_t	*adapter;
+
+    DHD_ERROR(("%s, enter\n", __FUNCTION__));
+
+    bcmsdh_sdio_remove(func);
+
+    adapter = dhd_wifi_platform_get_adapter(-1, -1, -1);
+
+    wifi_platform_set_power(adapter, FALSE, WIFI_TURNOFF_DELAY);
+
+    wifi_platform_set_power(adapter, TRUE, WIFI_TURNON_DELAY);
+
+    ret = bcmsdh_sdio_reset(func);
+    if (ret == 0) {
+        ret = bcmsdh_sdio_probe(func);
+        if (ret < 0) {
+            DHD_ERROR(("%s, sdio probe err = %d\n", __FUNCTION__, ret));
+        }
+    } else {
+        DHD_ERROR(("%s, sdio reset err = %d\n", __FUNCTION__, ret));
+    }
+
+    DHD_TRACE(("%s, exit\n", __FUNCTION__));
+
+    return ret;
+}
+#endif /* DHD_AUTO_BUS_RECOVERY */
 
 int
 dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)

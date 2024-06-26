@@ -92,13 +92,8 @@ static void IRQHandler(struct sdio_func *func);
 static void IRQHandlerF2(struct sdio_func *func);
 #endif /* !defined(OOB_INTR_ONLY) */
 static int sdioh_sdmmc_get_cisaddr(sdioh_info_t *sd, uint32 regaddr);
-#if defined(ANDROID_SDIO_RESET)
+#ifdef ANDROID_SDIO_RESET
 extern int sdio_reset_comm(struct mmc_card *card);
-#else
-static int sdio_reset_comm(struct mmc_card *card)
-{
-	return 0;
-}
 #endif /* ANDROID_SDIO_RESET */
 
 #define DEFAULT_SDIO_F2_BLKSIZE		512
@@ -166,6 +161,34 @@ void  sdmmc_set_clock_divisor(sdioh_info_t *sd, uint sd_div);
 #ifdef PLATFORM_IMX
 #define SD_CLOCK_UHS_IMX8 104000000
 #endif /* PLATFORM_IMX */
+
+int sdioh_reset_comm(struct sdio_func *func)
+{
+#ifdef ANDROID_SDIO_RESET
+    return sdio_reset_comm(func->card);
+#else /* ANDROID_SDIO_RESET */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0))
+    int ret;
+    
+    sd_trace(("%s, enter\n", __FUNCTION__));
+    
+    sdio_claim_host(func);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+    ret = mmc_sw_reset(func->card);
+#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)) */
+    ret = mmc_sw_reset(func->card->host);
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)) */
+    if (ret) {
+        sd_err(("%s, err = %d\n", __FUNCTION__, ret));
+    }
+    sdio_release_host(func);
+
+    return ret;    
+#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)) */
+    return 0;
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)) */
+#endif /* ANDROID_SDIO_RESET */
+}
 
 static int
 sdioh_sdmmc_card_enablefuncs(sdioh_info_t *sd)
@@ -1445,7 +1468,7 @@ sdioh_start(sdioh_info_t *sd, int stage)
 		   2.6.27. The implementation prior to that is buggy, and needs broadcom's
 		   patch for it
 		*/
-		if ((ret = sdio_reset_comm(sd->func[0]->card))) {
+		if ((ret = sdioh_reset_comm(sd->func[0]))) {
 			sd_err(("%s Failed, error = %d\n", __FUNCTION__, ret));
 			return ret;
 		}
@@ -1490,10 +1513,14 @@ sdioh_start(sdioh_info_t *sd, int stage)
 		} else {
 #if !defined(OOB_INTR_ONLY)
 			sdio_claim_host(sd->func[0]);
-			if (sd->func[2])
+			if (sd->func[2]) {
+                sdio_release_irq(sd->func[2]);
 				sdio_claim_irq(sd->func[2], IRQHandlerF2);
-			if (sd->func[1])
+            }
+			if (sd->func[1]) {
+                sdio_release_irq(sd->func[1]);
 				sdio_claim_irq(sd->func[1], IRQHandler);
+            }
 			sdio_release_host(sd->func[0]);
 #else /* defined(OOB_INTR_ONLY) */
 #if defined(HW_OOB)
@@ -1628,3 +1655,11 @@ sdmmc_set_clock_divisor(sdioh_info_t *sd, uint sd_div)
 	hz = sd->sd_clk_rate / sd_div;
 	sdmmc_set_clock_rate(sd, hz);
 }
+
+#ifdef DHD_AUTO_BUS_RECOVERY
+int bcmsdh_sdio_reset(struct sdio_func *func)
+{
+    sd_info(("%s, enter\n", __FUNCTION__));
+    return sdioh_reset_comm(func);
+}
+#endif /* DHD_AUTO_BUS_RECOVERY */

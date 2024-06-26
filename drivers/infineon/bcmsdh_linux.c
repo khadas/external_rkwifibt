@@ -174,8 +174,9 @@ void* bcmsdh_probe(osl_t *osh, void *dev, void *sdioh, void *adapter_info, uint 
 		* (LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 36))
 		*/
 
-#if defined(OOB_INTR_ONLY)
 	spin_lock_init(&bcmsdh_osinfo->oob_irq_spinlock);
+
+#if defined(OOB_INTR_ONLY)
 	/* Get customer specific OOB IRQ parametres: IRQ number as IRQ type */
 	bcmsdh_osinfo->oob_irq_num = wifi_platform_get_irq_number(adapter_info,
 		&bcmsdh_osinfo->oob_irq_flags);
@@ -361,7 +362,7 @@ void bcmsdh_oob_intr_set(bcmsdh_info_t *bcmsdh, bool enable)
 
 	bcmsdh_osinfo = bcmsdh->os_cxt;
 	spin_lock_irqsave(&bcmsdh_osinfo->oob_irq_spinlock, flags);
-	if (bcmsdh_osinfo->oob_irq_enabled != enable) {
+	if (bcmsdh_osinfo->oob_irq_registered && (bcmsdh_osinfo->oob_irq_enabled != enable)) {
 		if (enable)
 			enable_irq(bcmsdh_osinfo->oob_irq_num);
 		else

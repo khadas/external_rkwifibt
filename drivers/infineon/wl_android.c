@@ -3878,6 +3878,8 @@ int wl_android_wifi_on(struct net_device *dev)
 {
 	int ret = 0;
 	int retry = POWERUP_MAX_RETRY;
+	dhd_pub_t *dhdp;
+    bool dongle_reset = TRUE;
 
 	DHD_ERROR(("wl_android_wifi_on in\n"));
 	if (!dev) {
@@ -3886,6 +3888,12 @@ int wl_android_wifi_on(struct net_device *dev)
 	}
 
 	dhd_net_if_lock(dev);
+
+	dhdp = wl_cfg80211_get_dhdp(dev);
+    if (dhdp) {
+        dongle_reset = dhdp->dongle_reset;
+    }
+
 	if (!g_wifi_on) {
 		do {
 			dhd_net_wifi_platform_set_power(dev, TRUE, WIFI_TURNON_DELAY);
@@ -3918,7 +3926,7 @@ int wl_android_wifi_on(struct net_device *dev)
 #endif /* BCMSDIO */
 
 #ifndef BCMPCIE
-		if (!ret) {
+		if ((!ret) && dongle_reset) {
 			if (dhd_dev_init_ioctl(dev) < 0) {
 				ret = -EFAULT;
 			}

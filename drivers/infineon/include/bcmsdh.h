@@ -38,6 +38,10 @@
 #ifndef	_bcmsdh_h_
 #define	_bcmsdh_h_
 
+#ifdef DHD_AUTO_BUS_RECOVERY
+#include <linux/mmc/sdio_func.h>
+#endif /* DHD_AUTO_BUS_RECOVERY */
+
 #define BCMSDH_ERROR_VAL	0x0001 /* Error */
 #define BCMSDH_INFO_VAL		0x0002 /* Info */
 extern const uint bcmsdh_msglevel;
@@ -210,6 +214,12 @@ extern int bcmsdh_iovar_op(void *sdh, const char *name,
 
 /* Reset and reinitialize the device */
 extern int bcmsdh_reset(bcmsdh_info_t *sdh);
+
+#ifdef DHD_AUTO_BUS_RECOVERY
+extern int bcmsdh_sdio_probe(struct sdio_func *func);
+extern void bcmsdh_sdio_remove(struct sdio_func *func);
+extern int bcmsdh_sdio_reset(struct sdio_func *func);
+#endif /* DHD_AUTO_BUS_RECOVERY */
 
 /* helper functions */
 

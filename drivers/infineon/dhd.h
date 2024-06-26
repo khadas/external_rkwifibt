@@ -2297,6 +2297,10 @@ extern void dhd_sendup_log(dhd_pub_t *dhdp, void *data, int len);
 #ifdef SHOW_LOGTRACE
 void dhd_sendup_info_buf(dhd_pub_t *dhdp, uint8 *msg);
 #endif // endif
+#ifdef DHD_AUTO_BUS_RECOVERY
+extern void dhd_schedule_recovery(void);
+extern int dhd_bus_recovery(dhd_pub_t *dhdp);
+#endif /* DHD_AUTO_BUS_RECOVERY */
 extern int dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag);
 extern uint dhd_bus_status(dhd_pub_t *dhdp);
 extern int  dhd_bus_start(dhd_pub_t *dhdp);

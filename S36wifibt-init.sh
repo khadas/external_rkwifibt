@@ -10,6 +10,12 @@
 
 case "$1" in
 	start|stop|restart)
+		#The rk_demo has already called 'wifibt-init.sh'
+		if [ -n "$(pidof rk_demo)" ]; then
+			echo "rk_demo running"
+			exit
+		fi
+
 		/usr/bin/wifibt-init.sh $1
 		;;
 	*)

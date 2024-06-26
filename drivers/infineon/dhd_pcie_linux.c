@@ -3076,7 +3076,6 @@ struct device * dhd_bus_to_dev(dhd_bus_t *bus)
 
 #define KIRQ_PRINT_BUF_LEN 256
 
-#if (!defined(CONFIG_SPARSE_IRQ) || (LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)))
 void
 dhd_print_kirqstats(dhd_pub_t *dhd, unsigned int irq_num)
 {
@@ -3147,7 +3146,6 @@ dhd_show_kirqstats(dhd_pub_t *dhd)
 	}
 #endif /* BCMPCIE_OOB_HOST_WAKE */
 }
-#endif
 
 #ifdef DHD_FW_COREDUMP
 #ifdef BCMDHDX

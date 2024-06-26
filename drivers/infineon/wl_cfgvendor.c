@@ -1474,17 +1474,6 @@ exit:
 	}
 	return ret;
 }
-#else
-static int
-wl_cfgvendor_get_wake_reason_stats(struct wiphy *wiphy,
-        struct wireless_dev *wdev, const void *data, int len)
-{
-#if defined(CONFIG_ANDROID_VERSION) && (CONFIG_ANDROID_VERSION >= 13)
-	return -EOPNOTSUPP;
-#else
-	return WIFI_ERROR_NOT_SUPPORTED;
-#endif // endif
-}
 #endif /* DHD_WAKE_STATUS */
 
 #ifdef DHDTCPACK_SUPPRESS
@@ -7352,7 +7341,11 @@ static void wl_cfgvendor_dbg_send_file_dump_evt(void *ctx, const void *data,
 		wl_cfgvendor_nla_put_axi_error_data(skb, ndev);
 	}
 #endif /* DNGL_AXI_ERROR_LOGGING */
-	if (dhd_pub->memdump_enabled || (dhd_pub->memdump_type == DUMP_TYPE_BY_SYSDUMP)) {
+	if (
+#ifdef DHD_FW_COREDUMP
+        dhd_pub->memdump_enabled || 
+#endif /* DHD_FW_COREDUMP */
+        (dhd_pub->memdump_type == DUMP_TYPE_BY_SYSDUMP)) {
 		if (((ret = wl_cfgvendor_nla_put_memdump_data(skb, ndev, fw_len)) < 0) ||
 			((ret = wl_cfgvendor_nla_put_debug_dump_data(skb, ndev)) < 0) ||
 			((ret = wl_cfgvendor_nla_put_sssr_dump_data(skb, ndev)) < 0)) {

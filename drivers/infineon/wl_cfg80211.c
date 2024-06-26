@@ -10040,7 +10040,7 @@ wl_cfg80211_set_pmksa(struct wiphy *wiphy, struct net_device *dev,
 		if (pmksa->pmk_len) {
 			if (memcpy_s(&cfg->pmk_list->pmkids.pmkid[i].pmk, PMK_LEN_MAX, pmksa->pmk,
 				pmksa->pmk_len)) {
-				WL_ERR(("invalid pmk len = %lu", pmksa->pmk_len));
+				WL_ERR(("invalid pmk len = %d", (int)pmksa->pmk_len));
 			} else {
 				cfg->pmk_list->pmkids.pmkid[i].pmk_len = pmksa->pmk_len;
 			}
@@ -11394,7 +11394,7 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev,
 
 			memcpy(&mf_params->da.octet, &mgmt->da[0], ETH_ALEN);
 			memcpy(&mf_params->bssid.octet, &mgmt->bssid[0], ETH_ALEN);
-			*cookie = (u64)mf_params->data;
+			*cookie = (size_t)mf_params->data;
 			mf_params->packetId = cpu_to_le32(*cookie);
 
 			memcpy(mf_params->data, &buf[DOT11_MGMT_HDR_LEN],
@@ -15473,6 +15473,9 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 #endif /* LINUX_VER >= 3.0 && (WL_IFACE_COMB_NUM_CHANNELS || WL_CFG80211_P2P_DEV_IF) */
 
 	wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = &__wl_band_2ghz;
+#ifdef WL_5G_BAND_SUPPORT
+    wdev->wiphy->bands[IEEE80211_BAND_5GHZ] = &__wl_band_5ghz_a;
+#endif
 
 	wdev->wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
 	wdev->wiphy->cipher_suites = __wl_cipher_suites;
@@ -25389,7 +25392,7 @@ int wl_chspec_chandef(chanspec_t chanspec,
 	if (unlikely(!chan)) {
 		/* fw and cfg80211 channel lists are not in sync */
 		WL_ERR(("Couldn't find matching channel in wiphy channel list \n"));
-		ASSERT(0);
+//		ASSERT(0);
 		return -EINVAL;
 	}
 

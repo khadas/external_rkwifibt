@@ -56,4 +56,4 @@ muxenab=0x1
 # CLDO PWM voltage settings - 0x4 - 1.1 volt
 #cldo_pwm=0x4
 
-
+btc_mode=0

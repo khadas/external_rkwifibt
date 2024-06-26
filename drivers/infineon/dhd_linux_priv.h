@@ -372,7 +372,9 @@ typedef struct dhd_info {
 	struct mutex logdump_lock;
 	/* indicates mem_dump was scheduled as work queue or called directly */
 	bool scheduled_memdump;
+#ifndef DHD_AUTO_BUS_RECOVERY
 	struct work_struct dhd_hang_process_work;
+#endif /* DHD_AUTO_BUS_RECOVERY */
 #ifdef DHD_HP2P
 	spinlock_t	hp2p_lock;
 #endif /* DHD_HP2P */

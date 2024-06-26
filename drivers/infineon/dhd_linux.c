@@ -270,7 +270,11 @@ DECLARE_WAIT_QUEUE_HEAD(dhd_dpc_wait);
 extern void dhd_enable_oob_intr(struct dhd_bus *bus, bool enable);
 #endif /* defined(OOB_INTR_ONLY) || defined(BCMSPI_ANDROID) */
 #if defined(OEM_ANDROID)
+#ifdef DHD_AUTO_BUS_RECOVERY
+static void dhd_bus_recovery_process(struct work_struct *work_data);
+#else /* DHD_AUTO_BUS_RECOVERY */
 static void dhd_hang_process(struct work_struct *work_data);
+#endif /* #DHD_AUTO_BUS_RECOVERY */
 #endif /* #OEM_ANDROID */
 MODULE_LICENSE("GPL and additional rights");
 
@@ -412,6 +416,10 @@ struct dhd_firmware_req {
 #endif /* DHD_SUPPORT_REQFW_FOR_FIRMWARE_DOWNLOADING */
 
 dhd_pub_t	*g_dhd_pub = NULL;
+
+#if (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY))
+static struct work_struct dhd_bus_recovery_work;
+#endif /* (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY)) */
 
 #if defined(BT_OVER_SDIO)
 #include "dhd_bt_interface.h"
@@ -9272,7 +9280,9 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 #endif /* CONFIG_IPV6 && IPV6_NDO_SUPPORT */
 	dhd->dhd_deferred_wq = dhd_deferred_work_init((void *)dhd);
 #if defined(OEM_ANDROID)
+#ifndef DHD_AUTO_BUS_RECOVERY
 	INIT_WORK(&dhd->dhd_hang_process_work, dhd_hang_process);
+#endif /* #if DHD_AUTO_BUS_RECOVERY */
 #endif /* #if OEM_ANDROID */
 #ifdef DEBUG_CPU_FREQ
 	dhd->new_freq = alloc_percpu(int);
@@ -9685,6 +9695,8 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
 			nv = adapter->nv_path;
 	}
 
+    DHD_ERROR(("%s, firmware_path = %s, nvram_path = %s\n", __FUNCTION__, firmware_path, nvram_path));
+
 	/* Use module parameter if it is valid, EVEN IF the path has not been initialized
 	 *
 	 * TODO: need a solution for multi-chip, can't use the same firmware for all chips
@@ -9802,8 +9814,8 @@ bool dhd_update_fw_nv_path(dhd_info_t *dhdinfo)
 #else /* DHD_DYNAMIC_UPDATE_FW_NV_PATH */
 	/* clear the path in module parameter */
 	if (dhd_download_fw_on_driverload) {
-		firmware_path[0] = '\0';
-		nvram_path[0] = '\0';
+//		firmware_path[0] = '\0';
+//		nvram_path[0] = '\0';
 	}
 #endif /* DHD_DYNAMIC_UPDATE_FW_NV_PATH */
 
@@ -13369,7 +13381,9 @@ void dhd_detach(dhd_pub_t *dhdp)
 #endif /* DHD_ERPOM */
 
 #if defined(OEM_ANDROID)
+#ifndef DHD_AUTO_BUS_RECOVERY
 	cancel_work_sync(&dhd->dhd_hang_process_work);
+#endif /* DHD_AUTO_BUS_RECOVERY */
 #endif /* OEM_ANDROID */
 
 	/* Prefer adding de-init code above this comment unless necessary.
@@ -13527,6 +13541,9 @@ dhd_module_exit(void)
 	dhd_module_cleanup();
 	unregister_reboot_notifier(&dhd_reboot_notifier);
 	dhd_destroy_to_notifier_skt();
+#if (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY))
+	cancel_work_sync(&dhd_bus_recovery_work);
+#endif /* (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY)) */
 }
 
 #ifdef CONFIG_DHD_PLAT_ROCKCHIP
@@ -13577,6 +13594,10 @@ dhd_module_init(void)
 			dhd_driver_init_done = TRUE;
 		}
 	}
+
+#if (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY))
+    INIT_WORK(&dhd_bus_recovery_work, dhd_bus_recovery_process);
+#endif /* (defined(OEM_ANDROID) && defined(DHD_AUTO_BUS_RECOVERY)) */
 
 	DHD_ERROR(("%s out\n", __FUNCTION__));
 
@@ -16213,6 +16234,19 @@ dhd_dev_apf_delete_filter(struct net_device *ndev)
 #endif /* PKT_FILTER_SUPPORT && APF */
 
 #if defined(OEM_ANDROID)
+#ifdef DHD_AUTO_BUS_RECOVERY
+void dhd_schedule_recovery(void)
+{
+    DHD_TRACE(("%s, enter\n", __FUNCTION__));
+    schedule_work(&dhd_bus_recovery_work);
+}
+
+static void dhd_bus_recovery_process(struct work_struct *work_data)
+{
+    DHD_TRACE(("%s, enter\n", __FUNCTION__));
+    dhd_bus_recovery(g_dhd_pub);
+}
+#else /* DHD_AUTO_BUS_RECOVERY */
 static void dhd_hang_process(struct work_struct *work_data)
 {
 	struct net_device *dev;
@@ -16262,6 +16296,7 @@ static void dhd_hang_process(struct work_struct *work_data)
 	rtnl_unlock();
 #endif /* IFACE_HANG_FORCE_DEV_CLOSE */
 }
+#endif /* DHD_AUTO_BUS_RECOVERY */
 
 #ifdef EXYNOS_PCIE_LINKDOWN_RECOVERY
 extern dhd_pub_t *link_recovery;
@@ -16277,6 +16312,10 @@ EXPORT_SYMBOL(dhd_host_recover_link);
 
 int dhd_os_send_hang_message(dhd_pub_t *dhdp)
 {
+#ifdef DHD_AUTO_BUS_RECOVERY
+    dhd_schedule_recovery();
+    return 0;
+#else /* DHD_AUTO_BUS_RECOVERY */
 	int ret = 0;
 #ifdef WL_CFG80211
 	struct net_device *primary_ndev;
@@ -16355,6 +16394,7 @@ int dhd_os_send_hang_message(dhd_pub_t *dhdp)
 
 	}
 	return ret;
+#endif /* DHD_AUTO_BUS_RECOVERY */
 }
 
 int net_os_send_hang_message(struct net_device *dev)
@@ -18790,6 +18830,7 @@ void dhd_schedule_log_dump(dhd_pub_t *dhdp, void *type)
 static void
 dhd_print_buf_addr(dhd_pub_t *dhdp, char *name, void *buf, unsigned int size)
 {
+#ifdef DHD_FW_COREDUMP
 	if ((dhdp->memdump_enabled == DUMP_MEMONLY) ||
 		(dhdp->memdump_enabled == DUMP_MEMFILE_BUGON) ||
 		(dhdp->memdump_type == DUMP_TYPE_SMMU_FAULT)) {
@@ -18801,6 +18842,7 @@ dhd_print_buf_addr(dhd_pub_t *dhdp, char *name, void *buf, unsigned int size)
 			name, (uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
 #endif /* __ARM_ARCH_7A__ */
 	}
+#endif /* DHD_FW_COREDUMP */
 }
 
 static void

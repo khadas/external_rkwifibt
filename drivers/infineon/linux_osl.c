@@ -593,7 +593,7 @@ osl_cache_flush(void *va, uint size)
 #ifdef STB_SOC_WIFI
 		dma_sync_single_for_device(OSH_NULL, virt_to_phys(va), size, DMA_TX);
 #else /* STB_SOC_WIFI */
-		dma_sync_single_for_device(OSH_NULL, virt_to_dma(OSH_NULL, va), size,
+		dma_sync_single_for_device(OSH_NULL, virt_to_phys(va), size,
 			DMA_TO_DEVICE);
 #endif /* STB_SOC_WIFI */
 }
@@ -605,7 +605,7 @@ osl_cache_inv(void *va, uint size)
 #ifdef STB_SOC_WIFI
 	dma_sync_single_for_cpu(OSH_NULL, virt_to_phys(va), size, DMA_RX);
 #else /* STB_SOC_WIFI */
-	dma_sync_single_for_cpu(OSH_NULL, virt_to_dma(OSH_NULL, va), size, DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(OSH_NULL, virt_to_phys(va), size, DMA_FROM_DEVICE);
 #endif /* STB_SOC_WIFI */
 }
 

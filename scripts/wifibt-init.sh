@@ -60,6 +60,17 @@ start_bt_brcm()
 		--patchram ${WIFIBT_FIRMWARE_DIR:-/lib/firmware}/ $WIFIBT_TTY&
 }
 
+
+start_bt_rk_uart()
+{
+	killall -q -9 rk_hciattach || true
+	which rk_hciattach >/dev/null
+
+	bt_reset
+
+	rk_hciattach -n -s 115200 $WIFIBT_TTY rockchip 3000000 flow nosleep 11:22:33:44:55:66&
+}
+
 start_bt_rtk_uart()
 {
 	killall -q -9 rtk_hciattach || true
@@ -129,6 +140,7 @@ do_start_bt()
 	cd "${WIFIBT_MODULE_DIR:-/lib/modules}"
 
 	case "$WIFIBT_VENDOR" in
+		Rockchip) start_bt_rk_uart;;
 		Broadcom) start_bt_brcm;;
 		Realtek)
 			case "$WIFIBT_BUS" in

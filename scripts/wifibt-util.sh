@@ -76,12 +76,12 @@ wifibt_id()
 
 wifibt_module()
 {
-	BCM_KO=`wifibt_info | cut -f 5`
-	CYW_KO=`wifibt_info | cut -f 6`
-	if [ -e "/lib/modules/$BCM_KO" ]; then
-		echo "$BCM_KO"
+	FIRST_KO=`wifibt_info | cut -f 5`
+	SECOND_KO=`wifibt_info | cut -f 6`
+	if [[ "$SECOND_KO" =~ "cyw" ]] && [ -e "/lib/module/$SECOND_KO" ]; then
+		echo "$SECOND_KO"
 	else
-		echo "$CYW_KO"
+		echo "$FIRST_KO"
 	fi
 }
 
@@ -127,6 +127,7 @@ Broadcom	AP6335	02d0:4335	bcmdhd.ko
 Broadcom	AP6354	02d0:4354	bcmdhd.ko
 Broadcom	AP6356S	02d0:4356	bcmdhd.ko
 Broadcom	AP6398S	02d0:4359	bcmdhd.ko
+Rockchip	RK960	0296:5349	rk960.ko
 EOF
 fi
 

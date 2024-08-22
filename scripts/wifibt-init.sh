@@ -152,7 +152,7 @@ start_bt()
 
 	if bt_ready; then
 		echo "BT is already inited..."
-		hciconfig hci0 up 2>/dev/null || true
+		#hciconfig hci0 up 2>/dev/null || true
 		return 0
 	fi
 
@@ -160,7 +160,7 @@ start_bt()
 		for i in `seq 60`; do
 			if bt_ready; then
 				echo "Successfully init BT for $WIFIBT_CHIP!"
-				hciconfig hci0 up 2>/dev/null || true
+				#hciconfig hci0 up 2>/dev/null || true
 				return 0
 			fi
 			sleep .1

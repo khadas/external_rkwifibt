@@ -6,7 +6,11 @@ do_insmod()
 {
 	if ! lsmod | grep -wq "$1"; then
 		echo "Installing $1.ko ..."
-		insmod "$1.ko"
+		if [ "$1" = "rk960" ]; then
+			insmod "$1.ko" fw_no_sleep=1
+		else
+			insmod "$1.ko"
+		fi
 		sleep "${2:-0}"
 	fi
 }

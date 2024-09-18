@@ -78,7 +78,7 @@ wifibt_module()
 {
 	FIRST_KO=`wifibt_info | cut -f 5`
 	SECOND_KO=`wifibt_info | cut -f 6`
-	if [[ "$SECOND_KO" =~ "cyw" ]] && [ -e "/lib/module/$SECOND_KO" ]; then
+	if [[ "$SECOND_KO" =~ "cyw" ]] && [ -e "/lib/modules/$SECOND_KO" ]; then
 		echo "$SECOND_KO"
 	else
 		echo "$FIRST_KO"

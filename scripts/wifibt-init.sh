@@ -56,7 +56,8 @@ start_bt_brcm()
 	killall -q -9 brcm_patchram_plus1 || true
 	which brcm_patchram_plus1 >/dev/null
 
-	bt_reset
+	#bt_reset
+	rfkill unblock bluetooth
 
 	brcm_patchram_plus1 --enable_hci --no2bytes \
 		--use_baudrate_for_download --tosleep 200000 \
